@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SKA REPORTS - Dashboard (v44 - Cloudflare Edition)</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
+    
+    <style>
+        :root {
+            --bg-global: #051e3e; --bg-header: #03162f; --bg-nav: #0a2b5e; --bg-container: #0d3c75;
+            --card-blue: #3498db; --card-teal: #1abc9c; --card-pink: #e91e63; 
+            --card-orange: #f39c12; --card-indigo: #8e44ad; --card-success: #2ecc71;
+            --text-white: #ffffff; --text-dim: #cfd8dc;
+        }
+        * { box-sizing: border-box; }
+        body { margin: 0; padding: 0; background: var(--bg-global); color: var(--text-white); font-family: 'Segoe UI', Tahoma, sans-serif; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+        
+        .header-container { background-color: var(--bg-header); height: 60px; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); flex-shrink: 0; z-index: 100; }
+        .app-title { font-size: 24px; font-weight: 800; letter-spacing: 1px; text-transform: uppercase; position: absolute; left: 50%; transform: translateX(-50%); }
+        .header-right { display: flex; align-items: center; gap: 15px; font-size: 12px; color: var(--text-dim); }
+
+        .nav-bar { background: var(--bg-nav); display: flex; justify-content: center; padding: 0; margin-bottom: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); flex-shrink: 0; }
+        .nav-btn { background: transparent; border: none; color: rgba(255,255,255,0.6); padding: 15px 30px; font-size: 14px; cursor: pointer; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 4px solid transparent; transition: all 0.3s; }
+        .nav-btn:hover { background: rgba(255,255,255,0.05); color: #fff; }
+        .nav-btn.active { color: #fff; background: rgba(255,255,255,0.1); border-bottom-color: var(--card-blue); }
+
+        .metrics-wrapper { flex-shrink: 0; margin-bottom: 20px; }
+        .metrics-row { display: none; grid-template-columns: repeat(5, 1fr); gap: 20px; }
+        .metrics-row.active { display: grid; } 
+
+        .kpi-card { padding: 20px; border-radius: 16px; text-align: center; height: 140px; display: flex; flex-direction: column; justify-content: center; align-items: center; box-shadow: 0 4px 10px rgba(0,0,0,0.1); transition: transform 0.2s; background: var(--bg-container); }
+        .kpi-card.c-orange { background-color: var(--card-orange); } 
+        .kpi-card.c-blue { background-color: var(--card-blue); }
+        .kpi-card.c-teal { background-color: var(--card-teal); } 
+        .kpi-card.c-pink { background-color: var(--card-pink); }
+        .kpi-card.c-indigo { background-color: var(--card-indigo); }
+        .kpi-card.c-success { background-color: var(--card-success); }
+        
+        .kpi-label { font-size: 13px; color: rgba(255,255,255,0.9); text-transform: uppercase; font-weight: 600; margin-bottom: 5px; }
+        .kpi-value { font-size: 48px; font-weight: 800; line-height: 1; text-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .kpi-sub { font-size: 11px; margin-top: 5px; opacity: 0.8; }
+
+        .main-wrapper { padding: 0 20px; flex-grow: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .content-area { flex-grow: 1; position: relative; overflow: hidden; margin-bottom: 10px; }
+        .tab-pane { display: none; height: 100%; animation: fadeIn 0.4s ease-in-out; }
+        .tab-pane.active { display: block; }
+        .split-view { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; height: 100%; }
+        
+        .list-panel { background: var(--bg-container); border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; border: none; box-shadow: 0 4px 15px rgba(0,0,0,0.15); }
+        .panel-header { padding: 15px 20px; background: rgba(0,0,0,0.1); font-size: 16px; font-weight: 700; text-transform: uppercase; color: var(--text-white); display: flex; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.05); }
+        .scroller-container { overflow-y: auto; flex-grow: 1; position: relative; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.2) transparent; }
+        .scroller-content { padding: 0 20px; }
+        .ticket-row { display: flex; justify-content: space-between; padding: 15px 0; border-bottom: 1px solid rgba(255,255,255,0.05); align-items: center; }
+        .t-subject { font-size: 16px; font-weight: 600; color: #fff; }
+        .t-meta { font-size: 14px; color: rgba(255,255,255,0.6); margin-top: 4px; }
+        .t-time { font-size: 15px; font-weight: 700; color: var(--card-blue); }
+        .badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: bold; margin-left: 8px;}
+        .b-urgent { background: var(--card-pink); color: #fff; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 8px; }
+
+        /* QUALITY TAB */
+        .quality-container { height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: var(--bg-container); border-radius: 16px; border: 2px solid var(--card-orange); text-align: center; position: relative; overflow: hidden; }
+        .q-stars { font-size: 60px; margin-bottom: 20px; animation: pulse 2s infinite; }
+        .q-comment-box { background: rgba(255,255,255,0.05); padding: 30px; border-radius: 12px; margin-bottom: 30px; max-width: 85%; font-size: 32px; font-style: italic; line-height: 1.4; font-family: 'Georgia', serif; }
+        .q-agent-name { font-size: 48px; font-weight: 800; color: var(--card-orange); margin-bottom: 10px; }
+        .q-meta { margin-top:20px; font-size:16px; color:#888; }
+        
+        /* RANKING */
+        .agent-list { display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100%; gap: 10px; } 
+        .agent-card { background: rgba(255,255,255,0.05); width: 85%; padding: 10px 20px; border-radius: 50px; display: flex; align-items: center; gap: 15px; border: 1px solid rgba(255,255,255,0.1); }
+        .rank-1 { background: var(--card-blue); transform: scale(1.05); border: 2px solid #fff; box-shadow: 0 0 15px rgba(52, 152, 219, 0.5); }
+        .a-pos { font-size: 20px; font-weight: 800; width: 30px; text-align: center; }
+        .a-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; background: #333; }
+        .a-info { flex-grow: 1; }
+        .a-name { font-size: 16px; font-weight: 700; }
+        .a-badge { font-size: 11px; opacity: 0.8; text-transform: uppercase; }
+        .a-score-box { font-size: 24px; font-weight: 800; color: #fff; }
+        
+        .stats-grid { display: grid; grid-template-rows: auto 1fr; gap: 20px; height: 100%; }
+        .stats-kpi-row { display: flex; justify-content: center; height: 90px; }
+        .chart-container { position: relative; height: 100%; width: 100%; padding: 30px; display: flex; justify-content: center; align-items: center; }
+        .footer { background-color: var(--bg-nav); height: 40px; display: flex; justify-content: center; align-items: center; font-size: 14px; font-weight: bold; color: rgba(255,255,255,0.4); letter-spacing: 2px; text-transform: uppercase; flex-shrink: 0; }
+        
+        #modal { position: fixed; inset: 0; background: rgba(0,0,0,0.9); z-index: 2000; display: flex; justify-content: center; align-items: center; }
+        .modal-box { background: var(--bg-container); padding: 30px; width: 600px; border-radius: 16px; border: 1px solid rgba(255,255,255,0.1); }
+        .input-group { margin-bottom: 15px; }
+        label { display: block; font-size: 12px; color: var(--text-dim); margin-bottom: 5px; }
+        input[type="number"] { width: 100%; padding: 12px; background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); color: white; border-radius: 6px; }
+        .group-scroll { max-height: 300px; overflow-y: auto; background: rgba(0,0,0,0.3); border-radius: 6px; padding: 10px; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.1); } 100% { transform: scale(1); } }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <audio id="audio-clap" src="https://www.soundjay.com/human/sounds/applause-01.mp3"></audio>
+
+    <div class="header-container">
+        <div></div>
+        <div class="app-title">SKA REPORTS</div>
+        <div class="header-right">
+            <span id="lbl-update">Atualizado: --:--</span>
+            <button onclick="openConfig()" style="background:none; border:none; color:white; cursor:pointer; font-size:20px;">⚙️</button>
+        </div>
+    </div>
+
+    <div class="nav-bar">
+        <button class="nav-btn active" onclick="manualTab(0)">Tickets</button>
+        <button class="nav-btn" onclick="manualTab(1)">Críticos</button>
+        <button class="nav-btn" onclick="manualTab(2)">Ranking</button>
+        <button class="nav-btn" onclick="manualTab(3)">Stats</button>
+        <button class="nav-btn" onclick="manualTab(4)">Qualidade</button>
+    </div>
+
+    <div class="main-wrapper">
+        <div class="metrics-wrapper">
+            <div id="kpi-row-0" class="metrics-row active">
+                <div class="kpi-card c-blue"><span class="kpi-label">Criados</span><span class="kpi-value" id="kpi-created">0</span><div class="kpi-sub">Neste Mês</div></div>
+                <div class="kpi-card c-teal"><span class="kpi-label">Resolvidos</span><span class="kpi-value" id="kpi-solved">0</span><div class="kpi-sub">Neste Mês</div></div>
+                <div class="kpi-card c-orange"><span class="kpi-label">Em Aberto</span><span class="kpi-value" id="kpi-open">0</span><div class="kpi-sub">Fila Global</div></div>
+                <div class="kpi-card c-pink"><span class="kpi-label">T.M. 1ª Resp</span><span class="kpi-value" style="font-size:38px" id="kpi-reply">--</span><div class="kpi-sub">Horas Úteis</div></div>
+                <div class="kpi-card c-indigo"><span class="kpi-label">T.M. Resolução</span><span class="kpi-value" style="font-size:38px" id="kpi-res">--</span><div class="kpi-sub">Horas Úteis</div></div>
+            </div>
+
+            <div id="kpi-row-1" class="metrics-row">
+                <div class="kpi-card c-indigo"><span class="kpi-label">Fila Total</span><span class="kpi-value" id="kpi-open-c">0</span><div class="kpi-sub">Backlog</div></div>
+                <div class="kpi-card c-blue"><span class="kpi-label">SLA Mês</span><span class="kpi-value" id="kpi-sla-c">--%</span><div class="kpi-sub">Saúde Geral</div></div>
+                <div class="kpi-card c-pink"><span class="kpi-label">Fila Antiga</span><span class="kpi-value" id="kpi-old30">0</span><div class="kpi-sub">Abertos > 30 Dias</div></div>
+                <div class="kpi-card c-orange"><span class="kpi-label">Fila Estagnada</span><span class="kpi-value" id="kpi-stalled7">0</span><div class="kpi-sub">Sem Interação > 7 Dias</div></div>
+                <div class="kpi-card c-teal"><span class="kpi-label">Idade Média</span><span class="kpi-value" style="font-size:36px" id="kpi-avg-age">--</span><div class="kpi-sub">Dos Antigos (>30d)</div></div>
+            </div>
+
+            <div id="kpi-row-2" class="metrics-row">
+                <div class="kpi-card c-blue"><span class="kpi-label">Pesquisas Enviadas</span><span class="kpi-value" id="kpi-surveys-sent-r">0</span><div class="kpi-sub">Mês Vigente</div></div>
+                <div class="kpi-card c-pink"><span class="kpi-label">Taxa Resposta</span><span class="kpi-value" id="kpi-resp-rate-r">--%</span><div class="kpi-sub">Adesão</div></div>
+                <div class="kpi-card c-teal"><span class="kpi-label">Total Avaliados</span><span class="kpi-value" id="kpi-rated-total-r">0</span><div class="kpi-sub">Neste Mês</div></div>
+                <div class="kpi-card c-indigo"><span class="kpi-label">% Avaliados</span><span class="kpi-value" id="kpi-perc-rated">--%</span><div class="kpi-sub">Sobre Resolvidos</div></div>
+                <div class="kpi-card c-orange"><span class="kpi-label">CSAT 30d</span><span class="kpi-value" id="kpi-csat-r">--%</span><div class="kpi-sub">Qualidade</div></div>
+            </div>
+
+            <div id="kpi-row-shared" class="metrics-row">
+                 <div class="kpi-card c-blue"><span class="kpi-label">Pesquisas Enviadas</span><span class="kpi-value" id="kpi-surveys-sent">0</span><div class="kpi-sub">Mês Vigente</div></div>
+                 <div class="kpi-card c-pink"><span class="kpi-label">Taxa Resposta</span><span class="kpi-value" id="kpi-resp-rate">--%</span><div class="kpi-sub">Adesão</div></div>
+                 <div class="kpi-card c-teal"><span class="kpi-label">Total Avaliados</span><span class="kpi-value" id="kpi-rated-q">0</span><div class="kpi-sub">Neste Mês</div></div>
+                 <div class="kpi-card c-orange"><span class="kpi-label">CSAT 30 Dias</span><span class="kpi-value" id="kpi-csat-30d">--%</span><div class="kpi-sub">Média Móvel</div></div>
+                 <div class="kpi-card c-success"><span class="kpi-label">SLA Atendida</span><span class="kpi-value" id="kpi-sla-q">--%</span><div class="kpi-sub">Mês Vigente</div></div>
+            </div>
+        </div>
+
+        <div class="content-area">
+            <div id="tab-0" class="tab-pane active">
+                <div class="split-view">
+                    <div class="list-panel"><div class="panel-header">📥 Últimos Abertos</div><div class="scroller-container" id="list-open"></div></div>
+                    <div class="list-panel"><div class="panel-header">✅ Resolvidos Recentemente</div><div class="scroller-container" id="list-solved"></div></div>
+                </div>
+            </div>
+            
+            <div id="tab-1" class="tab-pane">
+                <div class="split-view">
+                    <div class="list-panel"><div class="panel-header" style="color:var(--card-orange)">⏳ Parados (+7d sem interação)</div><div class="scroller-container" id="list-stalled"></div></div>
+                    <div class="list-panel"><div class="panel-header" style="color:var(--card-pink)">🐢 Antigos (>30 Dias)</div><div class="scroller-container" id="list-old"></div></div>
+                </div>
+            </div>
+            
+            <div id="tab-2" class="tab-pane">
+                <div class="split-view">
+                    <div class="list-panel"><div class="panel-header">🏆 Top 5 Resoluções (Mês)</div><div class="scroller-container"><div class="agent-list" id="list-agents-solved"></div></div></div>
+                    <div class="list-panel"><div class="panel-header" style="color:var(--card-teal)">⭐ Top 5 Mais Avaliados (Mês)</div><div class="scroller-container"><div class="agent-list" id="list-agents-rated"></div></div></div>
+                </div>
+            </div>
+            
+            <div id="tab-3" class="tab-pane">
+                 <div class="split-view">
+                    <div class="list-panel"><div class="panel-header">👥 Resolvidos por Grupo</div><div class="chart-container"><canvas id="chart-groups"></canvas></div></div>
+                    <div class="list-panel"><div class="panel-header">📊 Status dos Chamados (Mês)</div><div class="chart-container"><canvas id="chart-status"></canvas></div></div>
+                </div>
+            </div>
+            
+            <div id="tab-4" class="tab-pane">
+                <div class="quality-container" id="quality-box">
+                    <div class="q-stars">⭐⭐⭐⭐⭐</div>
+                    <div class="q-comment-box" id="q-text">Carregando...</div>
+                    <div><div style="font-size:14px; color:#aaa; margin-bottom:5px; text-transform:uppercase;">Mérito do Agente</div><div class="q-agent-name" id="q-agent">---</div></div>
+                    <div style="margin-top:25px;">
+                        <div style="font-size:14px; color:#aaa; text-transform:uppercase; margin-bottom: 5px;">Cliente</div>
+                        <div style="font-size:28px; font-weight:800; color:white;" id="q-org">---</div>
+                        <div style="font-size:18px; color:#ccc; margin-top:5px;">Contato: <strong id="q-client" style="color:white">---</strong></div>
+                    </div>
+                    <div class="q-meta">Ticket <span id="q-id">#---</span> • <span id="q-date">--/--/-- --:--</span></div>
+                    <div id="confetti-zone"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="footer">SKA</div>
+
+    <div id="modal" class="hidden">
+        <div class="modal-box">
+            <h2 style="margin-top:0; color:var(--card-blue)">Configurações</h2>
+            <div class="input-group">
+                <label>Selecione os Grupos</label>
+                <div id="group-container" class="group-scroll"></div>
+                <button onclick="loadGroupsFromAPI()" style="margin-top:10px; background:var(--bg-nav); border:1px solid rgba(255,255,255,0.2); color:white; padding:10px; width:100%; cursor:pointer; border-radius:6px;">🔄 Recarregar Lista</button>
+            </div>
+            <div class="split-view" style="gap:10px; height: auto;">
+                <div class="input-group"><label>Troca Abas (seg)</label><input type="number" id="cfg-rotate" value="15"></div>
+                <div class="input-group"><label>Velocidade Scroll</label><input type="number" id="cfg-speed" value="50"></div>
+            </div>
+            <button onclick="saveConfig()" style="width:100%; padding:15px; background:var(--card-blue); border:none; color:white; font-weight:bold; border-radius:6px; cursor:pointer; margin-top:10px; font-size:16px;">SALVAR E INICIAR</button>
+            <div id="loader" class="hidden" style="text-align:center; margin-top:15px; color:var(--card-orange);">Carregando dados...</div>
+        </div>
+    </div>
+
+    <script>
+        Chart.defaults.color = '#ffffff'; Chart.defaults.borderColor = 'rgba(255,255,255,0.1)'; Chart.register(ChartDataLabels);
+        let app = { groups: [], rotateTime: 15000, scrollSpeed: 50, tabIndex: 0, timerR: null, timerF: null, lastRatingId: null, playAudioNext: false, charts: { groups: null, status: null } };
+        let cache = { users: {}, groupNames: {}, orgs: {} };
+        let auditData = { solved: [] };
+
+        window.onload = async () => { 
+            loadSettings(); await loadGroupsFromAPI(); 
+            if (localStorage.getItem('ska_groups')) { document.getElementById('modal').style.display = 'none'; initSystem(); } 
+            else { document.getElementById('modal').style.display = 'flex'; }
+        };
+        
+        function openConfig() { document.getElementById('modal').style.display = 'flex'; }
+        function loadSettings() {
+            const sg = localStorage.getItem('ska_groups'); if (sg) app.groups = JSON.parse(sg);
+            const sr = localStorage.getItem('ska_rotate'); if (sr) { app.rotateTime = parseInt(sr); document.getElementById('cfg-rotate').value = app.rotateTime / 1000; }
+            const ss = localStorage.getItem('ska_speed'); if (ss) { app.scrollSpeed = parseInt(ss); document.getElementById('cfg-speed').value = app.scrollSpeed; }
+        }
+        async function loadGroupsFromAPI() {
+            const container = document.getElementById('group-container'); container.innerHTML = '<div style="color:#aaa">Buscando grupos...</div>';
+            try {
+                const res = await fetchZendesk('groups.json?per_page=100');
+                if(!res.groups) throw new Error("Sem grupos");
+                res.groups.forEach(g => { cache.groupNames[g.id] = g.name; });
+                const sorted = res.groups.sort((a,b) => a.name.localeCompare(b.name));
+                container.innerHTML = sorted.map(g => `<label class="chk-item" style="display:flex; gap:10px; align-items:center; padding:5px; cursor:pointer;"><input type="checkbox" value="${g.id}" ${app.groups.includes(String(g.id)) || app.groups.includes(g.id) ? 'checked' : ''} style="width:20px; height:20px;">${g.name}</label>`).join('');
+            } catch(e) { container.innerHTML = `<div style="color:var(--card-pink)">Erro API.</div>`; }
+        }
+        function saveConfig() {
+            const checkedBoxes = document.querySelectorAll('#group-container input:checked');
+            app.groups = Array.from(checkedBoxes).map(cb => cb.value);
+            app.rotateTime = (parseInt(document.getElementById('cfg-rotate').value) || 15) * 1000;
+            app.scrollSpeed = parseInt(document.getElementById('cfg-speed').value) || 50;
+            localStorage.setItem('ska_groups', JSON.stringify(app.groups)); localStorage.setItem('ska_rotate', app.rotateTime); localStorage.setItem('ska_speed', app.scrollSpeed);
+            document.getElementById('loader').classList.remove('hidden'); initSystem();
+        }
+        
+        async function initSystem() {
+            await fetchData(); document.getElementById('modal').style.display = 'none';
+            if(app.timerF) clearInterval(app.timerF); app.timerF = setInterval(fetchData, 5 * 60 * 1000);
+            if(app.timerR) clearInterval(app.timerR); app.timerR = setInterval(rotateTab, app.rotateTime);
+        }
+
+        async function fetchData() {
+            document.getElementById('lbl-update').innerText = "Atualizando...";
+            const now = new Date(); 
+            const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            
+            const d30 = new Date(); d30.setDate(d30.getDate() - 30); const date30d = d30.toISOString().split('T')[0];
+            const d7 = new Date(); d7.setDate(d7.getDate() - 7); const date7d = d7.toISOString().split('T')[0];
+
+            let qGroups = app.groups.length ? ` group_id:${app.groups.join(' group_id:')}` : "";
+            
+            const queries = {
+                open: `type:ticket status<solved${qGroups}`,
+                created: `type:ticket created>=${startOfMonth}${qGroups}`, 
+                solved: `type:ticket solved>=${startOfMonth}${qGroups}`, 
+                
+                open30: `type:ticket status<solved created<${date30d}${qGroups}`, 
+                stalled7: `type:ticket status<solved updated<${date7d}${qGroups}`, 
+
+                quality: `type:ticket satisfaction:good${qGroups}`,
+                
+                csatGood30: `type:ticket satisfaction:good updated>=${date30d}${qGroups}`,
+                csatBad30: `type:ticket satisfaction:bad updated>=${date30d}${qGroups}`,
+
+                surveysSent: `type:ticket solved>=${startOfMonth} -satisfaction:unoffered${qGroups}`
+            };
+
+            try {
+                const [
+                    resOpen, resCreatedList, resSolvedCount, solvedTickets, 
+                    resOpen30Count, resStalled7Count, resStalled7List, resOldestList,
+                    resGood30Count, resBad30Count,
+                    resSurveysSent
+                ] = await Promise.all([
+                    fetchZendesk(`search.json?query=${encodeURIComponent(queries.open)}&sort_by=created_at&sort_order=desc`),
+                    fetchAllPages(queries.created), 
+                    fetchZendesk(`search.json?query=${encodeURIComponent(queries.solved)}&per_page=1`),
+                    fetchAllPagesUnlimited(queries.solved), 
+                    fetchZendesk(`search.json?query=${encodeURIComponent(queries.open30)}&per_page=1`), 
+                    fetchZendesk(`search.json?query=${encodeURIComponent(queries.stalled7)}&per_page=1`), 
+                    fetchAllPages(queries.stalled7), 
+                    fetchAllPagesUnlimited(queries.open30),
+                    fetchZendesk(`search.json?query=${encodeURIComponent(queries.csatGood30)}&per_page=1`),
+                    fetchZendesk(`search.json?query=${encodeURIComponent(queries.csatBad30)}&per_page=1`),
+                    fetchZendesk(`search.json?query=${encodeURIComponent(queries.surveysSent)}&per_page=1`)
+                ]);
+
+                auditData.solved = solvedTickets;
+
+                let totalRatedMonthCount = 0;
+                solvedTickets.forEach(t => {
+                    const rating = t.satisfaction_rating ? t.satisfaction_rating.score : null;
+                    if (rating === 'good' || rating === 'bad') {
+                        totalRatedMonthCount++;
+                        t.is_rated = true;
+                    }
+                });
+
+                const good30 = resGood30Count.count; const bad30 = resBad30Count.count; const totalRated30 = good30 + bad30;
+                const csatScore30 = totalRated30 > 0 ? ((good30 / totalRated30) * 100).toFixed(0) + '%' : '0%';
+
+                let slaOkCount = 0;
+                solvedTickets.forEach(t => {
+                    const tags = t.tags || [];
+                    if (!tags.includes('breached') && !tags.includes('sla_breach')) slaOkCount++;
+                });
+                const slaScore = solvedTickets.length > 0 ? ((slaOkCount / solvedTickets.length) * 100).toFixed(0) + '%' : '100%';
+
+                const percRated = solvedTickets.length > 0 ? ((totalRatedMonthCount / solvedTickets.length) * 100).toFixed(0) + '%' : '0%';
+
+                const countSent = resSurveysSent.count;
+                const responseRate = countSent > 0 ? ((totalRatedMonthCount / countSent) * 100).toFixed(1) + '%' : '0%';
+
+                const recentSolved = solvedTickets.sort((a,b) => new Date(b.updated_at) - new Date(a.updated_at)).slice(0, 50);
+                const solvedIds = recentSolved.map(t => t.id);
+                const metricsMap = await fetchTicketMetrics(solvedIds);
+
+                let totalAge = 0; 
+                resOldestList.forEach(t => { totalAge += (new Date() - new Date(t.created_at)); });
+                const avgAgeDays = resOldestList.length > 0 ? Math.floor((totalAge / resOldestList.length) / (1000 * 60 * 60 * 24)) + 'd' : '--';
+
+                const resQuality = await fetchZendesk(`search.json?query=${encodeURIComponent(queries.quality)}&sort_by=updated_at&sort_order=desc&per_page=1`);
+                const latestTicketGood = (resQuality.results && resQuality.results.length > 0) ? resQuality.results[0] : null;
+
+                const userIds = new Set();
+                [...resOpen.results, ...recentSolved, ...resStalled7List, ...resOldestList.slice(0,20)].forEach(t => {
+                    if(t.requester_id) userIds.add(t.requester_id); if(t.assignee_id) userIds.add(t.assignee_id);
+                });
+                if(latestTicketGood) {
+                    userIds.add(latestTicketGood.assignee_id); userIds.add(latestTicketGood.requester_id);
+                    if(latestTicketGood.organization_id) await resolveOrgs([latestTicketGood.organization_id]);
+                }
+                await resolveUsers(Array.from(userIds));
+
+                updateUI({
+                    open: resOpen, 
+                    createdCount: resCreatedList.length,
+                    solvedCount: resSolvedCount.count,
+                    solvedList: recentSolved, 
+                    allSolvedList: solvedTickets, 
+                    metrics: metricsMap,
+                    
+                    open30Count: resOpen30Count.count,
+                    stalledCount: resStalled7Count.count,
+                    stalledList: resStalled7List,
+                    oldestList: resOldestList,
+                    avgAge: avgAgeDays,
+
+                    createdListForChart: resCreatedList,
+                    
+                    csat: csatScore30,
+                    sla: slaScore,
+                    totalRated: totalRatedMonthCount,
+                    percRated: percRated,
+                    
+                    surveysSent: countSent,
+                    responseRate: responseRate
+                });
+
+                updateQualityTab(latestTicketGood);
+                document.getElementById('lbl-update').innerText = "Atualizado: " + now.toLocaleTimeString();
+            } catch (e) { console.error(e); document.getElementById('lbl-update').innerText = "Erro API"; }
+        }
+
+        function updateUI(data) {
+            document.getElementById('kpi-created').innerText = data.createdCount; 
+            document.getElementById('kpi-solved').innerText = data.solvedCount; 
+            document.getElementById('kpi-open').innerText = data.open.count; 
+            
+            let sumReply=0, countReply=0, sumRes=0, countRes=0;
+            const startOfMonth = new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+            data.solvedList.forEach(t => {
+                if (new Date(t.created_at) < startOfMonth) return;
+                const m = data.metrics[t.id];
+                let resVal = (m && m.full_resolution_time_in_minutes?.business > 0) ? m.full_resolution_time_in_minutes.business : calcBusinessMinutes(new Date(t.created_at), new Date(t.updated_at));
+                if(resVal > 0) { sumRes += resVal; countRes++; }
+                let replyVal = m?.reply_time_in_minutes?.business || m?.reply_time_in_minutes?.calendar;
+                if (replyVal !== undefined && replyVal !== null) { sumReply += replyVal; countReply++; }
+            });
+            document.getElementById('kpi-res').innerText = countRes > 0 ? formatPreciseTime((sumRes/countRes)*60000) : '--';
+            document.getElementById('kpi-reply').innerText = countReply > 0 ? formatPreciseTime((sumReply/countReply)*60000) : '--';
+
+            document.getElementById('kpi-open-c').innerText = data.open.count;
+            document.getElementById('kpi-sla-c').innerText = data.sla;
+            document.getElementById('kpi-old30').innerText = data.open30Count;
+            document.getElementById('kpi-stalled7').innerText = data.stalledCount;
+            document.getElementById('kpi-avg-age').innerText = data.avgAge;
+
+            document.getElementById('kpi-surveys-sent-r').innerText = data.surveysSent;
+            document.getElementById('kpi-resp-rate-r').innerText = data.responseRate;
+            document.getElementById('kpi-rated-total-r').innerText = data.totalRated;
+            document.getElementById('kpi-perc-rated').innerText = data.percRated;
+            document.getElementById('kpi-csat-r').innerText = data.csat;
+
+            document.getElementById('kpi-surveys-sent').innerText = data.surveysSent;
+            document.getElementById('kpi-resp-rate').innerText = data.responseRate;
+            document.getElementById('kpi-rated-q').innerText = data.totalRated;
+            document.getElementById('kpi-csat-30d').innerText = data.csat;
+            document.getElementById('kpi-sla-q').innerText = data.sla;
+
+            renderList('list-open', data.open.results.slice(0, 15), 'created_at', 'precise');
+            renderList('list-solved', data.solvedList.slice(0, 15), 'updated_at', 'precise');
+            renderList('list-stalled', data.stalledList.sort((a,b) => new Date(a.updated_at) - new Date(b.updated_at)).slice(0, 15), 'updated_at', 'days'); 
+            renderList('list-old', data.oldestList.sort((a,b) => new Date(a.created_at) - new Date(b.created_at)).slice(0, 15), 'created_at', 'days');
+
+            renderRankingSolved(data.allSolvedList, 'list-agents-solved');
+            renderRankingRated(data.allSolvedList, 'list-agents-rated');
+            updateCharts(data.createdListForChart, data.solvedList);
+        }
+
+        async function fetchAllPagesUnlimited(query) {
+            let all = []; let url = `search.json?query=${encodeURIComponent(query)}&sort_by=updated_at&sort_order=desc`;
+            let loopCount = 0;
+            while(url && loopCount < 50) { 
+                const res = await fetchZendesk(url);
+                all = [...all, ...res.results];
+                if(!res.next_page) break;
+                url = res.next_page.replace('https://skasuporte.zendesk.com/api/v2/', '');
+                loopCount++;
+            }
+            return all;
+        }
+
+        async function fetchAllPages(query) {
+            let all = []; let url = `search.json?query=${encodeURIComponent(query)}&sort_by=updated_at&sort_order=desc&include=metric_sets`;
+            for(let i=0; i<5; i++) {
+                const res = await fetchZendesk(url); all = [...all, ...res.results];
+                if(!res.next_page) break; url = res.next_page.replace('https://skasuporte.zendesk.com/api/v2/', '');
+            }
+            return all;
+        }
+
+        async function fetchZendesk(endpoint) {
+            const WORKER_URL = "https://proxy-ska-dashboard.sensedata-dash.workers.dev"; 
+            try {
+                const res = await fetch(`${WORKER_URL}/${endpoint.replace('https://skasuporte.zendesk.com/api/v2/', '')}`, {
+                    method: 'GET',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!res.ok) throw new Error(`Erro API: ${res.status}`);
+                return await res.json();
+            } catch (error) {
+                console.error("Falha ao buscar dados:", error);
+                return { results: [], count: 0 };
+            }
+        }
+
+        async function fetchTicketMetrics(ticketIds) {
+            const metrics = {}; if(ticketIds.length === 0) return metrics;
+            for (let i = 0; i < ticketIds.length; i += 100) {
+                const chunk = ticketIds.slice(i, i + 100);
+                const res = await fetchZendesk(`ticket_metrics.json?ticket_ids=${chunk.join(',')}`);
+                if(res.ticket_metrics) res.ticket_metrics.forEach(m => metrics[m.ticket_id] = m);
+            }
+            return metrics;
+        }
+        async function resolveUsers(ids) {
+            const missing = ids.filter(id => !cache.users[id]); if(!missing.length) return;
+            for (let i = 0; i < missing.length; i += 100) {
+                const res = await fetchZendesk(`users/show_many.json?ids=${missing.slice(i, i+100).join(',')}`);
+                if(res.users) res.users.forEach(u => { cache.users[u.id] = { name: u.name, photo: u.photo?.content_url }; });
+            }
+        }
+        async function resolveOrgs(ids) {
+            const missing = ids.filter(id => !cache.orgs[id]); if(!missing.length) return;
+            const res = await fetchZendesk(`organizations/show_many.json?ids=${missing.join(',')}`);
+            if(res.organizations) res.organizations.forEach(o => { cache.orgs[o.id] = { name: o.name }; });
+        }
+        
+        function updateCharts(createdList, solvedList) {
+            const commonOptions = { responsive: true, maintainAspectRatio: false, layout: { padding: 40 }, cutout: '60%', plugins: { legend: { position: 'right', labels: { color: '#fff', font: {size: 14, family: 'Segoe UI'} } }, datalabels: { color: '#fff', font: (context) => { let sum = 0; context.chart.data.datasets[0].data.map(d => sum+=d); return { weight: 'bold', size: (context.dataset.data[context.dataIndex]/sum) < 0.05 ? 11 : 16 }; }, display: true, formatter: (value, ctx) => { let sum = 0; ctx.chart.data.datasets[0].data.map(d => sum+=d); return (value*100 / sum).toFixed(1)+"%"; }, anchor: (ctx) => { let sum=0; ctx.chart.data.datasets[0].data.map(d => sum+=d); return (ctx.dataset.data[ctx.dataIndex]/sum) < 0.05 ? 'end' : 'center'; }, align: (ctx) => { let sum=0; ctx.chart.data.datasets[0].data.map(d => sum+=d); return (ctx.dataset.data[ctx.dataIndex]/sum) < 0.05 ? 'end' : 'center'; }, offset: (ctx) => { let sum=0; ctx.chart.data.datasets[0].data.map(d => sum+=d); return (ctx.dataset.data[ctx.dataIndex]/sum) < 0.05 ? 10 : 0; }, clamp: true } } };
+            const groupCounts = {}; solvedList.forEach(t => { const gName = cache.groupNames[t.group_id] || `ID ${t.group_id}`; groupCounts[gName] = (groupCounts[gName] || 0) + 1; });
+            if(app.charts.groups) app.charts.groups.destroy(); app.charts.groups = new Chart(document.getElementById('chart-groups').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(groupCounts), datasets: [{ data: Object.values(groupCounts), backgroundColor: ['#1abc9c', '#3498db', '#9b59b6', '#e67e22', '#e74c3c', '#f1c40f', '#34495e'], borderWidth: 0 }] }, options: commonOptions });
+            const statusCounts = {}; createdList.forEach(t => { let st = t.status; if(st === 'new') st = 'Novo'; else if(st === 'open') st = 'Aberto'; else if(st === 'pending') st = 'Pendente'; else if(st === 'hold') st = 'Em Espera'; else if(st === 'solved') st = 'Resolvido'; else if(st === 'closed') st = 'Fechado'; statusCounts[st] = (statusCounts[st] || 0) + 1; });
+            if(app.charts.status) app.charts.status.destroy(); app.charts.status = new Chart(document.getElementById('chart-status').getContext('2d'), { type: 'doughnut', data: { labels: Object.keys(statusCounts), datasets: [{ data: Object.values(statusCounts), backgroundColor: ['#3498db', '#e91e63', '#f39c12', '#1abc9c', '#9b59b6', '#2ecc71'], borderWidth: 0 }] }, options: commonOptions });
+        }
+
+        function updateQualityTab(ticket) {
+            if(!ticket) { document.getElementById('q-org').innerText = "---"; document.getElementById('q-text').innerText = "Nenhuma avaliação recente."; document.getElementById('q-agent').innerText = "---"; document.getElementById('q-client').innerText = "---"; document.getElementById('q-id').innerText = "#---"; document.getElementById('q-date').innerText = "--/--/--"; return; }
+            if(app.lastRatingId !== ticket.id) { app.lastRatingId = ticket.id; app.playAudioNext = true; createConfetti(); }
+            const rating = ticket.satisfaction_rating;
+            document.getElementById('q-text').innerText = rating.comment ? `"${rating.comment.trim()}"` : 'Avaliação positiva recebida!';
+            document.getElementById('q-agent').innerText = cache.users[ticket.assignee_id]?.name || 'Agente';
+            document.getElementById('q-client').innerText = cache.users[ticket.requester_id]?.name || 'Cliente';
+            const orgName = (ticket.organization_id && cache.orgs[ticket.organization_id]) ? cache.orgs[ticket.organization_id].name : 'Cliente Particular';
+            document.getElementById('q-org').innerText = orgName;
+            const d = new Date(ticket.updated_at);
+            const dateStr = d.toLocaleDateString('pt-BR') + ' ' + d.toLocaleTimeString('pt-BR', {hour: '2-digit', minute:'2-digit'});
+            document.getElementById('q-id').innerText = `#${ticket.id}`; document.getElementById('q-date').innerText = dateStr;
+        }
+
+        function renderList(elId, list, dateField, formatType) {
+            const container = document.getElementById(elId); if(!list.length) { container.innerHTML = '<div style="padding:20px;opacity:0.5;text-align:center;font-style:italic;">Nenhum ticket encontrado</div>'; return; }
+            const html = list.map(t => { const diffMs = new Date() - new Date(t[dateField]); let timeStr = formatType === 'smart' ? ((diffMs < 86400000) ? formatPreciseTime(diffMs) : Math.floor(diffMs/86400000)+'d') : (formatType === 'days' ? Math.floor(diffMs/86400000)+'d' : formatPreciseTime(diffMs)); const name = cache.users[t.requester_id]?.name || `ID ${t.requester_id}`; const days = Math.floor(diffMs/86400000); const color = days > 7 ? 'var(--card-pink)' : (days > 3 ? 'var(--card-orange)' : 'var(--card-teal)'); return `<div class="ticket-row"><div style="flex-grow:1; min-width:0;"><div class="t-subject"><span class="status-dot" style="background:${color}"></span>#${t.id} - ${t.subject}${t.priority === 'urgent' ? '<span class="badge b-urgent">URGENTE</span>' : ''}</div><div class="t-meta">👤 ${name}</div></div><div class="t-time">${timeStr}</div></div>`; }).join('');
+            container.innerHTML = `<div class="scroller-content">${html}</div>`; setupScroll(container);
+        }
+
+        function renderRankingSolved(tickets, elId) {
+            const counts = {}; tickets.forEach(t => { if(t.assignee_id) { if(!counts[t.assignee_id]) counts[t.assignee_id] = { count: 0, user: cache.users[t.assignee_id] }; counts[t.assignee_id].count++; } });
+            const sorted = Object.values(counts).sort((a,b) => b.count - a.count).slice(0, 5);
+            renderAgentList(sorted, elId, 'Chamados Resolvidos');
+        }
+
+        function renderRankingRated(tickets, elId) {
+            const counts = {}; 
+            tickets.forEach(t => { 
+                if(t.assignee_id && t.is_rated) { 
+                    if(!counts[t.assignee_id]) counts[t.assignee_id] = { count: 0, user: cache.users[t.assignee_id] }; 
+                    counts[t.assignee_id].count++; 
+                } 
+            });
+            const sorted = Object.values(counts).sort((a,b) => b.count - a.count).slice(0, 5); 
+            if(sorted.length === 0) { document.getElementById(elId).innerHTML = '<div style="padding:20px;opacity:0.5;text-align:center;">Nenhuma avaliação no mês</div>'; return; }
+            renderAgentList(sorted, elId, 'Avaliações Recebidas');
+        }
+
+        function renderAgentList(list, elId, label) {
+            document.getElementById(elId).innerHTML = list.map((item, i) => { 
+                const name = item.user?.name || 'Agente'; 
+                const avatar = item.user?.photo || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=random&color=fff`; 
+                return `<div class="agent-card ${i===0?'rank-1':''}"><div class="a-pos">${i===0?'👑':(i+1)+'º'}</div><img src="${avatar}" class="a-avatar"><div class="a-info"><div class="a-name">${name}</div><div class="a-badge">${label}</div></div><div class="a-score-box">${item.count}</div></div>`; 
+            }).join('');
+        }
+
+        window.auditarAgente = function(nome) {
+            const result = auditData.solved.filter(t => cache.users[t.assignee_id]?.name.toLowerCase().includes(nome.toLowerCase()));
+            console.log(`=== AUDITORIA DE: ${nome} ===`);
+            console.log(`Total Resolvidos no Mês: ${result.length}`);
+            const avaliados = result.filter(t => t.is_rated);
+            console.log(`Total Avaliados: ${avaliados.length}`);
+            console.table(result.map(t => ({ ID: t.id, Assunto: t.subject, Data: t.updated_at, Avaliado: t.is_rated ? 'SIM' : 'NÃO' })));
+        };
+
+        function calcBusinessMinutes(start, end) { if (start >= end) return 0; let minutes = 0; let current = new Date(start); const finish = new Date(end); while (current < finish) { const day = current.getDay(); if (day === 0 || day === 6) { current.setHours(0,0,0,0); current.setDate(current.getDate() + 1); continue; } const workStart = new Date(current); workStart.setHours(8,0,0,0); const workEnd = new Date(current); workEnd.setHours(18,0,0,0); if (current >= workEnd) { current.setHours(0,0,0,0); current.setDate(current.getDate() + 1); continue; } if (current < workStart) current = workStart; let chunkEnd = (finish < workEnd) ? finish : workEnd; if (chunkEnd > current) minutes += (chunkEnd - current) / 60000; current = chunkEnd; if (current.getTime() === workEnd.getTime()) { current.setDate(current.getDate() + 1); current.setHours(0,0,0,0); } } return minutes; }
+        function formatPreciseTime(ms, short = false) { const totalMinutes = Math.floor(ms / 60000); const h = Math.floor(totalMinutes / 60); const m = totalMinutes % 60; return h < 1 ? (m === 0 ? "< 1m" : `${m}m`) : `${h}h ${m}m`; }
+        function rotateTab() { manualTab((app.tabIndex + 1) % 5, true); }
+        function manualTab(idx, isAuto = false) { 
+            if(!isAuto) { clearInterval(app.timerR); setTimeout(() => { clearInterval(app.timerR); app.timerR = setInterval(rotateTab, app.rotateTime); }, 30000); } 
+            app.tabIndex = idx; 
+            document.querySelectorAll('.nav-btn').forEach((b, i) => b.classList.toggle('active', i === idx)); 
+            document.querySelectorAll('.tab-pane').forEach((p, i) => p.classList.toggle('active', i === idx)); 
+            document.querySelectorAll('.metrics-row').forEach(r => r.classList.remove('active'));
+            const kpiRowId = (idx <= 2) ? `kpi-row-${idx}` : `kpi-row-shared`;
+            const row = document.getElementById(kpiRowId); if(row) row.classList.add('active');
+            const activePane = document.getElementById(`tab-${idx}`); if(activePane) { activePane.querySelectorAll('.scroller-container').forEach(el => setupScroll(el)); } 
+            if(idx === 4 && app.playAudioNext) { const audio = document.getElementById('audio-clap'); audio.volume = 0.5; audio.play().catch(e => console.log("Autoplay block")); app.playAudioNext = false; } 
+        }
+        function setupScroll(el) { if(el.scrollId) clearInterval(el.scrollId); const content = el.querySelector('.scroller-content'); if(!content || content.offsetHeight <= el.offsetHeight) return; let pos = 0, isPaused = false; el.addEventListener('mouseenter', () => isPaused = true); el.addEventListener('mouseleave', () => isPaused = false); el.scrollId = setInterval(() => { if(el.offsetParent === null || isPaused) return; pos++; if(pos >= (content.offsetHeight - el.offsetHeight) + 50) pos = 0; el.scrollTop = pos; }, app.scrollSpeed); }
+        function createConfetti() { const container = document.getElementById('confetti-zone'); container.innerHTML = ''; for(let i=0; i<40; i++) { const conf = document.createElement('div'); conf.classList.add('confetti'); conf.style.left = Math.random() * 100 + '%'; conf.style.backgroundColor = ['#f00', '#0f0', '#00f', '#ff0', '#0ff'][Math.floor(Math.random()*5)]; conf.style.animationDuration = (Math.random() * 3 + 2) + 's'; container.appendChild(conf); } }
+        function agendarRefreshMadrugada() { const agora = new Date(); const alvo = new Date(); alvo.setHours(4, 0, 0, 0); if (agora > alvo) alvo.setDate(alvo.getDate() + 1); const tempoAteRefresh = alvo - agora; console.log(`Auto-Refresh: ${alvo.toLocaleString()}`); setTimeout(() => { window.location.reload(); }, tempoAteRefresh); } agendarRefreshMadrugada();
+        const styleSheet = document.createElement("style"); styleSheet.innerText = `@keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } } @keyframes fall { to { transform: translateY(100vh) rotate(720deg); } } .confetti { position: absolute; width: 10px; height: 10px; top: -10px; }`; document.head.appendChild(styleSheet);
+    </script>
+</body>
+</html>
