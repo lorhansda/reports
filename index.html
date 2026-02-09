@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SKA REPORTS - Dashboard TV (v56 - Full Audit)</title>
+    <title>SKA REPORTS - Dashboard TV (v57 - Multi-TV Safe)</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
     
@@ -362,7 +362,16 @@
         
         async function initSystem() {
             await fetchData(); document.getElementById('modal').style.display = 'none';
-            if(app.timerF) clearInterval(app.timerF); app.timerF = setInterval(fetchData, 5 * 60 * 1000);
+            if(app.timerF) clearInterval(app.timerF); 
+            
+            // --- PROTEÇÃO ANTI-SYNC PARA MÚLTIPLAS TVs ---
+            // Adiciona um atraso aleatório de até 2 minutos (120s) ao intervalo
+            // para evitar que todas as 8 TVs batam na API ao mesmo tempo
+            const randomDelay = Math.floor(Math.random() * 120000); 
+            const intervalTime = (5 * 60 * 1000) + randomDelay;
+            console.log("Intervalo de atualização desta TV (Anti-Sync): " + (intervalTime/1000).toFixed(0) + "s");
+            
+            app.timerF = setInterval(fetchData, intervalTime);
             if(app.timerR) clearInterval(app.timerR); app.timerR = setInterval(rotateTab, app.rotateTime);
         }
 
